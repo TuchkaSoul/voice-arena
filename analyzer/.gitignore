@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Виртуальные окружения
+.venv/
+venv/
+env/
+ENV/
+
+# Модели ONNX (большие файлы — качаются отдельно)
+models/*.onnx
+models/*.onnx.data
+models/*.pkl
+models/*.pt
+models/*.pth
+
+# Аудио (тестовые записи не коммитим)
+audio/*.wav
+audio/*.mp3
+audio/*.flac
+audio/*.ogg
+audio/*.m4a
+
+# Кэш HuggingFace (если когда-нибудь понадобится)
+.cache/
+huggingface/
+
+# Данные для обучения / отладки
+data/
+*.npz
+*.npy
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ОС
+.DS_Store
+Thumbs.db
+
+# Логи и временные
+*.log
+tmp/
+temp/
