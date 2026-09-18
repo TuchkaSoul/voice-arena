@@ -1,99 +1,78 @@
 import numpy as np
+import torch
 import onnxruntime as ort
 import librosa
+from transformers import AutoFeatureExtractor, AutoModelForAudioClassification
 
 SR = 16000
+ort.set_default_logger_severity(3)
 
-
-def _softmax(x: np.ndarray) -> np.ndarray:
-    e = np.exp(x - x.max())
-    return e / e.sum()
-
-
-class AASIST:
-    """Детектор синтеза на Spectra-AASIST. Вход: фиксированное окно 64600."""
-
-    WINDOW = 64600  # 4.0375 с при 16 кГц — стандарт ASVspoof
-
-    def __init__(self, model_path: str):
-        self.session = ort.InferenceSession(
-            model_path, providers=["CPUExecutionProvider"]
-        )
-        self.input_name = self.session.get_inputs()[0].name  # "wav"
-        outputs = [o.name for o in self.session.get_outputs()]
-        if "logits" not in outputs:
-            raise RuntimeError(f"Нет выхода 'logits'. Доступны: {outputs}")
+class Wav2Vec2AntiSpoof:
+    """Deepfake detection using FP16 optimized Wav2Vec2 classification."""
+    
+    def __init__(self, model_id: str = "garystafford/wav2vec2-deepfake-voice-detector"):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.processor = AutoFeatureExtractor.from_pretrained(model_id)
+        
+        dtype = torch.float16 if self.device.type == "cuda" else torch.float32
+        self.model = AutoModelForAudioClassification.from_pretrained(
+            model_id, torch_dtype=dtype
+        ).to(self.device)
+        self.model.eval()
+        self.spoof_idx = 1 
 
     def predict(self, audio: np.ndarray) -> float:
-        chunks = self._chunk(audio)
-        scores = [self._predict_chunk(c) for c in chunks]
-        return float(np.mean(scores))
+        chunk_samples = SR * 5  
+        scores = []
+        
+        for i in range(0, len(audio), chunk_samples):
+            chunk = audio[i:i + chunk_samples]
+            if len(chunk) < SR:
+                chunk = np.pad(chunk, (0, SR - len(chunk)), 'constant')
+                
+            inputs = self.processor(chunk, sampling_rate=SR, return_tensors="pt", padding=True)
+            inputs = {
+                k: v.to(self.device, dtype=torch.float16) if v.dtype == torch.float32 else v.to(self.device) 
+                for k, v in inputs.items()
+            }
 
-    def _chunk(self, audio: np.ndarray) -> list[np.ndarray]:
-        n = len(audio)
-        if n == 0:
-            return [np.zeros(self.WINDOW, dtype=np.float32)]
-        if n <= self.WINDOW:
-            return [np.pad(audio, (0, self.WINDOW - n))]
-
-        chunks = []
-        step = self.WINDOW // 2
-        for start in range(0, n - self.WINDOW + 1, step):
-            chunks.append(audio[start:start + self.WINDOW])
-        if (n - self.WINDOW) % step != 0:
-            chunks.append(audio[-self.WINDOW:])
-        return chunks
-
-    def _predict_chunk(self, chunk: np.ndarray) -> float:
-        x = chunk[np.newaxis, :].astype(np.float32)
-        logits = np.asarray(
-            self.session.run(["logits"], {self.input_name: x})[0]
-        ).flatten()
-        probs = _softmax(logits)
-        # порядок классов этой модели: [spoof, bonafide]
-        return float(probs[0])
-
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
+                
+            scores.append(float(probs[0, self.spoof_idx].item()))
+            
+        return float(np.mean(scores)) if scores else 0.0
 
 class ECAPA:
-    """Экстрактор эмбеддингов голоса (VoxCeleb ECAPA512)."""
-
+    """Speaker embedding extractor (VoxCeleb ECAPA512)."""
+    
     SR = 16000
     N_MELS = 80
 
     def __init__(self, model_path: str):
-        self.session = ort.InferenceSession(
-            model_path, providers=["CPUExecutionProvider"]
-        )
+        options = ort.SessionOptions()
+        options.log_severity_level = 3
+        providers = ["CPUExecutionProvider"]
+        self.session = ort.InferenceSession(model_path, sess_options=options, providers=providers)
         self.input_name = self.session.get_inputs()[0].name
+        
         shape = self.session.get_inputs()[0].shape
-        self.expects_fbank = (
-            len(shape) == 3
-            and isinstance(shape[-1], int)
-            and shape[-1] == self.N_MELS
-        )
+        self.expects_fbank = (len(shape) == 3 and isinstance(shape[-1], int) and shape[-1] == self.N_MELS)
 
     def embed(self, audio: np.ndarray) -> np.ndarray:
-        """audio: mono float32 @ 16 кГц. Возвращает вектор (D,)."""
         if self.expects_fbank:
             feat = self._log_fbank(audio)
             x = feat[np.newaxis, :, :].astype(np.float32)
         else:
             x = audio[np.newaxis, :].astype(np.float32)
-
+            
         emb = self.session.run(None, {self.input_name: x})[0]
         return np.asarray(emb, dtype=np.float32).flatten()
 
     def _log_fbank(self, audio: np.ndarray) -> np.ndarray:
-        """80-мерный log-mel filterbank, совместимый с weSpeaker/SpeechBrain."""
         mel = librosa.feature.melspectrogram(
-            y=audio,
-            sr=self.SR,
-            n_fft=400,
-            hop_length=160,
-            win_length=400,
-            n_mels=self.N_MELS,
-            fmin=20,
-            fmax=7600,
+            y=audio, sr=self.SR, n_fft=400, hop_length=160, win_length=400, 
+            n_mels=self.N_MELS, fmin=20, fmax=7600
         )
-        log_mel = np.log(mel + 1e-6)
-        return log_mel.T  # (T, 80)
+        return np.log(mel + 1e-6).T

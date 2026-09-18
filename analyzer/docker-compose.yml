@@ -1,0 +1,17 @@
+services:
+  analyzer:
+    build: .
+    volumes:
+      - ./audio:/app/audio
+      - ./models:/app/models
+      - hf_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  hf_cache:
