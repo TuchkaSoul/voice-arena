@@ -1,0 +1,13 @@
+services:
+  analyzer:
+    build: .
+    volumes:
+      - ./audio:/app/audio
+      - ./models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

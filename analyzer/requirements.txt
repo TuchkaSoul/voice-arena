@@ -1,0 +1,9 @@
+torch==2.0.1
+torchaudio==2.0.2
+transformers==4.35.2
+safetensors==0.4.2
+onnxruntime-gpu==1.16.3
+numpy<2.0.0
+soundfile
+librosa
+scipy
