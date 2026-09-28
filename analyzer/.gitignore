@@ -16,11 +16,7 @@ env/
 ENV/
 
 # Модели ONNX (большие файлы — качаются отдельно)
-models/*.onnx
-models/*.onnx.data
-models/*.pkl
-models/*.pt
-models/*.pth
+models/
 
 # Аудио (тестовые записи не коммитим)
 audio/*.wav
@@ -28,6 +24,7 @@ audio/*.mp3
 audio/*.flac
 audio/*.ogg
 audio/*.m4a
+audio/*.opus
 
 # Кэш HuggingFace (если когда-нибудь понадобится)
 .cache/

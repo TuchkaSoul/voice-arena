@@ -10,6 +10,11 @@ VAD_WINDOW = 512
 VAD_CONTEXT = 64
 
 def load_audio(path: str, sr: int = SR) -> np.ndarray:
+    """
+    Используем soundfile (C++ libsndfile) для быстрого чтения 
+    и высокоточный soxr-алгоритм librosa для ресемплинга, 
+    чтобы не искажать ВЧ-спектр для DSP-анализа.
+    """
     try:
         y, file_sr = sf.read(path, dtype='float32')
         if y.ndim > 1:
