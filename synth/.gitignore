@@ -1,0 +1,37 @@
+# Окружение
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Веса моделей и голоса — качаются по инструкции из README
+voices/
+models/
+*.onnx
+*.onnx.json
+*.pth
+*.safetensors
+
+# Результаты прогонов
+runs/
+live_raw/
+*.wav
+*.mp3
+*.ogg
+*.opus
+*.flac
+
+# ЗАКРЫТЫЙ НАБОР ПРЕСЕТОВ.
+# Правило из README: детектор не должен видеть все атаки заранее.
+# Пока эти файлы не в гите, вторая команда до них не доберётся.
+# Открываем их вручную — после прогона, вместе с результатами.
+presets/held_out/*
+!presets/held_out/.gitkeep
+
+# IDE и ОС
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

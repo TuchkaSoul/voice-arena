@@ -1,0 +1,15 @@
+name: piper_irina
+engine: piper
+notes: Базовая слабая атака раунда 0. Женский голос, настройки по умолчанию.
+
+engine_params:
+  model: voices/ru_RU-irina-medium.onnx
+  length_scale: 1.0      # темп: больше — медленнее
+  noise_scale: 0.667     # разброс тембра
+  normalize_audio: false  # уровень выравнивает channel, одинаково с живым корпусом
+  noise_w_scale: 0.8     # разброс длительностей фонем
+
+text:
+  expand_numbers: true
+  expand_abbrev: true
+  strip_stress: true

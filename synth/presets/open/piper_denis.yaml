@@ -1,0 +1,15 @@
+name: piper_denis
+engine: piper
+notes: Мужской голос той же модели. Нужен, чтобы проверить определение пола.
+
+engine_params:
+  model: voices/ru_RU-denis-medium.onnx
+  length_scale: 1.0
+  noise_scale: 0.667
+  normalize_audio: false  # уровень выравнивает channel, одинаково с живым корпусом
+  noise_w_scale: 0.8
+
+text:
+  expand_numbers: true
+  expand_abbrev: true
+  strip_stress: true

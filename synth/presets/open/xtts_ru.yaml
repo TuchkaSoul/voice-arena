@@ -1,0 +1,22 @@
+name: xtts_ru
+engine: xtts
+notes: >
+  Сильная атака: клонирование голоса по образцу. Образец должен быть
+  записью голоса кого-то из команды — голоса посторонних людей не
+  клонируем, это правило из README проекта.
+  Лицензия XTTS-v2 — CPML, некоммерческая. В записку перечислить.
+
+engine_params:
+  model: tts_models/multilingual/multi-dataset/xtts_v2
+  speaker_wav:                          # несколько образцов — тембр держится стабильнее
+    - voices/speaker_ru_1.wav           # нарезано из voices/Запись.m4a,
+    - voices/speaker_ru_2.wav           # по 8 с из начала, середины и конца
+    - voices/speaker_ru_3.wav
+  language: ru
+  device: auto                          # cuda, если есть, иначе cpu
+  generate_params: {}                   # сюда можно класть speed, temperature и т.п.
+
+text:
+  expand_numbers: true
+  expand_abbrev: true
+  strip_stress: true

@@ -1,0 +1,18 @@
+name: piper_slow
+engine: piper
+notes: >
+  Тот же голос, но замедленный и с большим разбросом длительностей.
+  Проверяем, влияет ли просодия на детектор при прочих равных —
+  модель одна, меняются только ручки.
+
+engine_params:
+  model: voices/ru_RU-irina-medium.onnx
+  length_scale: 1.3
+  noise_scale: 0.8
+  normalize_audio: false  # уровень выравнивает channel, одинаково с живым корпусом
+  noise_w_scale: 1.0
+
+text:
+  expand_numbers: true
+  expand_abbrev: true
+  strip_stress: true
