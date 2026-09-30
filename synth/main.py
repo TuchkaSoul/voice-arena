@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 from synth import channel as channel_mod
-from synth import corpus, manifest, presets, text
+from synth import corpus, evaluation, manifest, presets, text
 from synth.pipeline import SynthRun, channel_only
 
 DEFAULT_CORPUS = Path("corpus/phrases_v1.txt")
@@ -90,16 +90,29 @@ def cmd_synth(args: argparse.Namespace) -> int:
 
 
 def cmd_channel(args: argparse.Namespace) -> int:
-    rows = channel_only(
-        src_dir=Path(args.src),
-        out_dir=Path(args.out),
-        channel=args.channel,
-        run_id=args.run,
-        label=args.label,
-        preset_name=args.name,
-    )
-    print(f"обработано {len(rows)} файлов, канал {args.channel}")
-    print(f"манифест: {Path(args.out) / args.run / f'{args.name}.{args.channel}.jsonl'}")
+    for name in _resolve_channels(args.channel):
+        rows = channel_only(
+            src_dir=Path(args.src),
+            out_dir=Path(args.out),
+            channel=name,
+            run_id=args.run,
+            label=args.label,
+            preset_name=args.name,
+        )
+        print(f"обработано {len(rows)} файлов, канал {name}")
+        print(f"манифест: {Path(args.out) / args.run / f'{args.name}.{name}.jsonl'}")
+    return 0
+
+
+def cmd_evaluate(args: argparse.Namespace) -> int:
+    paths = [Path(name) for name in args.manifest]
+    for row in evaluation.summarize(paths, Path(args.results), Path(args.root)):
+        if row.error_rate is None:
+            rate = "нет оценок"
+        else:
+            rate = f"{row.mistakes}/{row.evaluated} ({row.error_rate:.1%})"
+        kind = "пропуски синтеза" if row.label == manifest.LABEL_SPOOF else "ложные тревоги"
+        print(f"{row.channel:<10} {kind:<19} {rate}; без оценки: {row.errors}")
     return 0
 
 
@@ -127,14 +140,22 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_synth)
 
     c = sub.add_parser("channel", help="прогнать готовые записи через канал (живой корпус)")
-    c.add_argument("--src", required=True, help="папка с исходными записями")
-    c.add_argument("--channel", required=True)
+    c.add_argument("--src", required=True, help="исходный аудиофайл или папка")
+    c.add_argument("--channel", nargs="+", required=True,
+                   help="один или несколько каналов, либо all")
     c.add_argument("--run", required=True)
     c.add_argument("--out", default=str(DEFAULT_OUT))
     c.add_argument("--label", default=manifest.LABEL_BONAFIDE,
                    choices=[manifest.LABEL_BONAFIDE, manifest.LABEL_SPOOF])
     c.add_argument("--name", default="live", help="имя «пресета» для этой пачки")
     c.set_defaults(func=cmd_channel)
+
+    e = sub.add_parser("evaluate", help="сравнить манифесты с оценками анализатора")
+    e.add_argument("--manifest", nargs="+", required=True,
+                   help="файлы манифестов синтеза и живого голоса")
+    e.add_argument("--results", required=True, help="JSONL от analyzer/main.py --jsonl")
+    e.add_argument("--root", default=".", help="корень путей в манифестах (synth/)")
+    e.set_defaults(func=cmd_evaluate)
 
     n = sub.add_parser("normalize", help="показать, что движок получит на вход")
     n.add_argument("text")

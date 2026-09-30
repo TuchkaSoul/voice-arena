@@ -7,6 +7,9 @@
 from __future__ import annotations
 
 import random
+import json
+import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Callable, Iterable
@@ -135,14 +138,15 @@ def channel_only(
     preset_name: str = "live",
     patterns: tuple[str, ...] = ("*.wav", "*.flac", "*.mp3", "*.m4a", "*.ogg"),
 ) -> list[manifest.ManifestRow]:
-    """Прогоняет готовые записи через канал, без синтеза.
+    """Прогоняет файл или папку с готовыми записями через канал.
 
     Нужно для живого корпуса: свои записи обязаны пройти ровно тот же
     кодек, что и синтез. Если этого не сделать, детектор научится
     отличать не человека от машины, а wav от opus.
     """
     src_dir = Path(src_dir)
-    files = sorted(p for pattern in patterns for p in src_dir.glob(pattern))
+    files = ([src_dir] if src_dir.is_file() else
+             sorted(p for pattern in patterns for p in src_dir.glob(pattern)))
     if not files:
         raise FileNotFoundError(f"в {src_dir} нет аудиофайлов")
 
@@ -152,7 +156,24 @@ def channel_only(
     for i, src in enumerate(files, 1):
         utt_id = f"live{i:04d}"
         final = channel_mod.apply(src, audio_dir, channel, utt_id)
-        info = sf.info(str(src))
+        # soundfile не читает m4a, а реальные записи часто приходят именно
+        # в этом формате. ffprobe нужен только для частоты исходника.
+        try:
+            source_sr = int(sf.info(str(src)).samplerate)
+        except RuntimeError:
+            ffprobe = shutil.which("ffprobe")
+            if not ffprobe:
+                raise channel_mod.FfmpegMissing("ffprobe не найден в PATH")
+            result = subprocess.run(
+                [ffprobe, "-v", "error", "-select_streams", "a:0",
+                 "-show_entries", "stream=sample_rate", "-of", "json", str(src)],
+                capture_output=True, text=True, check=True,
+            )
+            streams = json.loads(result.stdout).get("streams", [])
+            if not streams:
+                raise ValueError(f"в {src} нет аудиодорожки")
+            source_sr = int(streams[0]["sample_rate"])
+        final_info = sf.info(str(final))
         rows.append(
             manifest.ManifestRow(
                 utt_id=utt_id,
@@ -164,8 +185,8 @@ def channel_only(
                 channel=channel,
                 path=final.as_posix(),
                 sr=channel_mod.TARGET_SR,
-                engine_sr=int(info.samplerate),
-                duration_sec=round(info.frames / info.samplerate, 3),
+                engine_sr=source_sr,
+                duration_sec=round(final_info.frames / final_info.samplerate, 3),
                 sha256=manifest.sha256_file(final),
                 run_id=run_id,
                 seed=0,

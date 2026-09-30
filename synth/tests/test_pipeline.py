@@ -8,13 +8,14 @@
 import numpy as np
 import pytest
 import soundfile as sf
+import subprocess
 
 from synth import channel as channel_mod
 from synth import manifest
 from synth.corpus import Phrase
 from synth.engines import registry
 from synth.engines.base import SynthEngine, Utterance
-from synth.pipeline import SynthRun
+from synth.pipeline import SynthRun, channel_only
 from synth.presets import Preset
 
 try:
@@ -148,3 +149,20 @@ def test_empty_channel_list_rejected(tmp_path):
             out_dir=tmp_path,
             run_id="rt",
         )
+
+
+@needs_ffmpeg
+def test_live_m4a_file_gets_bonafide_manifest(tmp_path):
+    raw = tmp_path / "source.wav"
+    sf.write(raw, np.zeros(22050, dtype=np.float32), 22050)
+    m4a = tmp_path / "live.m4a"
+    subprocess.run(
+        [channel_mod.ffmpeg_path(), "-y", "-loglevel", "error", "-i", str(raw), str(m4a)],
+        check=True,
+    )
+    rows = channel_only(m4a, tmp_path / "runs", "clean", "r1", preset_name="live_control")
+    assert len(rows) == 1
+    assert rows[0].label == manifest.LABEL_BONAFIDE
+    assert rows[0].engine_sr == 22050
+    assert rows[0].channel == "clean"
+    assert rows[0].duration_sec == pytest.approx(1.0, abs=0.05)

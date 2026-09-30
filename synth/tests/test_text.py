@@ -57,6 +57,19 @@ def test_grouping_does_not_glue_unrelated_numbers():
     assert "десять часов" in out and "тридцать минут" in out
 
 
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        ("1 мая", "первого мая"),
+        ("15 марта", "пятнадцатого марта"),
+        ("21 сентября", "двадцать первого сентября"),
+        ("31 декабря", "тридцать первого декабря"),
+    ],
+)
+def test_dates_are_read_as_ordinals(source, expected):
+    assert expected in normalize(source)
+
+
 def test_abbreviations():
     assert "так далее" in normalize("Отчёты, справки и т. д.")
     assert "номер" in normalize("Заказ № 178")
