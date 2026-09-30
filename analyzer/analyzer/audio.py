@@ -2,6 +2,8 @@ import numpy as np
 import onnxruntime as ort
 import soundfile as sf
 import librosa
+import shutil
+import subprocess
 
 ort.set_default_logger_severity(3)
 
@@ -22,7 +24,20 @@ def load_audio(path: str, sr: int = SR) -> np.ndarray:
         if file_sr != sr:
             y = librosa.resample(y, orig_sr=file_sr, target_sr=sr)
     except Exception:
-        y, _ = librosa.load(path, sr=sr, mono=True)
+        try:
+            y, _ = librosa.load(path, sr=sr, mono=True)
+        except Exception:
+            # Некоторые корректные длинные Opus-файлы libsndfile и librosa
+            # считают повреждёнными. ffmpeg читает их без потери записи.
+            ffmpeg = shutil.which("ffmpeg")
+            if not ffmpeg:
+                raise RuntimeError(f"не удалось прочитать {path}; ffmpeg не найден")
+            result = subprocess.run(
+                [ffmpeg, "-v", "error", "-i", path, "-ac", "1", "-ar", str(sr),
+                 "-f", "f32le", "pipe:1"],
+                capture_output=True, check=True,
+            )
+            y = np.frombuffer(result.stdout, dtype="<f4").copy()
     return y
 
 class SileroVAD:

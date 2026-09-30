@@ -85,7 +85,14 @@ class Analyzer:
 
         del speech_audio, valid_chunks, audio
 
-        return self._build_result(path, None, segments, final_spoof_score, dsp_reason, spoof_threshold, t0)
+        result = self._build_result(path, None, segments, final_spoof_score, dsp_reason, spoof_threshold, t0)
+        result.update({
+            "model_score": w2v2_score,
+            "flatness": flatness,
+            "rolloff_hz": rolloff,
+            "spectrum_variance": spec_var,
+        })
+        return result
 
     def _build_result(self, path: str, audio: np.ndarray, segments: list, spoof_score: float, reason: str, threshold: float, t0: float) -> dict:
         return {

@@ -1,4 +1,5 @@
 """Console reporting formatter for Liveness Analyzer."""
+from pathlib import Path
 
 class C:
     RESET = "\033[0m"
@@ -17,7 +18,7 @@ def print_footer() -> None:
     print(f"{C.CYAN}╰{'─'*94}╯{C.RESET}\n")
 
 def format_row(res: dict) -> str:
-    file_name = res['file'].split('/')[-1]
+    file_name = Path(res['file']).name
     if len(file_name) > 25:
         file_name = file_name[:22] + "..."
 
