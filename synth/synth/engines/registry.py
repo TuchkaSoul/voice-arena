@@ -13,6 +13,7 @@ from .base import SynthEngine
 _ENGINES: dict[str, tuple[str, str]] = {
     "piper": ("synth.engines.piper", "PiperEngine"),
     "xtts": ("synth.engines.xtts", "XttsEngine"),
+    "f5": ("synth.engines.f5", "F5Engine"),
     "chatterbox": ("synth.engines.chatterbox", "ChatterboxEngine"),
 }
 

@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_registry_lists_all_engines():
-    assert registry.available() == ["chatterbox", "piper", "xtts"]
+    assert registry.available() == ["chatterbox", "f5", "piper", "xtts"]
 
 
 def test_unknown_engine_names_the_alternatives():
