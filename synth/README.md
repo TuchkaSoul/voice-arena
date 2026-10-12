@@ -64,6 +64,7 @@
 | --- | --- | --- |
 | `piper` | слабая атака: ONNX, без torch, CPU | работает, ×1.0 realtime на CPU |
 | `xtts` | сильная атака: клонирование по образцу | код готов, нужен `coqui-tts` и образец голоса |
+| `f5` | F5-TTS_RUSSIAN, клонирование по образцу и его расшифровке | локальный запуск, пресет `f5_ru` |
 | `chatterbox` | запасной вариант | заглушка, см. файл |
 
 ---
@@ -161,6 +162,70 @@ Hugging Face (1 867 929 118 байт), но контрольная сумма н
 должен быть голос кого-то из команды.** Голоса посторонних людей —
 дикторов, актёров, публичных персон — не клонируем: это правило из
 README проекта, и первый же коммит с чужим голосом его обнуляет.
+
+---
+
+### F5-TTS_RUSSIAN
+
+Для сравнения используется базовый русский checkpoint `model_240000_inference.safetensors`
+из [Misha24-10/F5-TTS_RUSSIAN](https://huggingface.co/Misha24-10/F5-TTS_RUSSIAN),
+его **русский `vocab.txt`** и Vocos 24 кГц. Веса имеют лицензию CC BY-NC 4.0.
+Версии файлов закреплены в `setup_f5.py` и пресете. Загрузчик продолжает
+оборванные загрузки через curl, проверяет размер и SHA-256 больших файлов,
+сохраняет происхождение и контрольные суммы в локальных `models/*/source.json`.
+
+Ставить в отдельное окружение, чтобы зависимости F5 не затронули XTTS.
+Проверено на Python 3.13 с уже установленными torch/torchaudio 2.7.0+cu128.
+Если torch отсутствует, сначала установи совместимую пару для своей CUDA
+по [инструкции F5](https://github.com/SWivid/F5-TTS#installation).
+
+```powershell
+python -m venv .venv-f5 --system-site-packages
+.venv-f5/Scripts/python.exe -m pip install -r requirements-f5.txt
+.venv-f5/Scripts/python.exe -m pip install --no-deps f5-tts==1.1.22
+.venv-f5/Scripts/python.exe setup_f5.py
+```
+
+`--no-deps` исключает ненужные для этого API интерфейс Gradio, bitsandbytes
+и torchcodec. Нужные при импорте зависимости Trainer перечислены в
+`requirements-f5.txt`, хотя обучение здесь не запускается.
+
+Образец — собственная запись команды `voices/speaker_ru_1.wav`, 8 секунд,
+из того же исходника, который использовали для XTTS. F5 также требует
+соответствующий текст в `voices/speaker_ru_1.txt`. Его можно записать вручную
+либо однократно распознать локальным Whisper Base:
+
+```powershell
+.venv-f5/Scripts/python.exe setup_f5.py --transcribe-reference
+```
+
+ASR-расшифровку нужно проверить на слух. Пустой текст не допускается:
+движок не запускает скрытую загрузку Whisper Large. В пресете `strip_stress: false`
+сохраняет `+` перед ударной гласной; первый прогон использует исходный корпус
+без дополнительной разметки ударений. Неизвестные русскому словарю символы
+вызывают ошибку до синтеза, чтобы модель не пропускала их незаметно.
+
+```powershell
+.venv-f5/Scripts/python.exe main.py synth --preset f5_ru --channel clean opus_24k --run r2-f5 --corpus corpus/phrases_long_v1.txt --prefix L
+.venv-f5/Scripts/python.exe main.py channel --src voices/Запись.m4a --channel clean opus_24k --run r2-f5 --name live_control
+```
+
+Для независимого контроля используй новую запись в команде `channel`
+с другим `--name`. Исходник образца служит только предварительным контролем.
+Синтез каждой фразы выполняется один раз для двух каналов, loudnorm и
+кодеки совпадают с обработкой живых записей.
+
+Из папки `analyzer/` оценить синтез и контроль одним запуском:
+
+```powershell
+../synth/.venv/Scripts/python.exe main.py --manifest ../synth/runs/r2-f5/f5_ru.phrases_long_v1.clean.jsonl ../synth/runs/r2-f5/f5_ru.phrases_long_v1.opus_24k.jsonl ../synth/runs/r2-f5/live_control.clean.jsonl ../synth/runs/r2-f5/live_control.opus_24k.jsonl --manifest-root ../synth --jsonl ../synth/runs/r2-f5/analysis.f5.jsonl
+```
+
+Из `synth/` получить доли ошибок отдельно по классам и каналам:
+
+```powershell
+.venv/Scripts/python.exe main.py evaluate --manifest runs/r2-f5/f5_ru.phrases_long_v1.clean.jsonl runs/r2-f5/f5_ru.phrases_long_v1.opus_24k.jsonl runs/r2-f5/live_control.clean.jsonl runs/r2-f5/live_control.opus_24k.jsonl --results runs/r2-f5/analysis.f5.jsonl
+```
 
 ---
 
