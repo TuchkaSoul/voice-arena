@@ -7,6 +7,12 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     libsndfile1 \
+    libsndfile1-dev \
+    libvorbis-dev \
+    libogg-dev \
+    libflac-dev \
+    libopus-dev \
+    libmp3lame-dev \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
