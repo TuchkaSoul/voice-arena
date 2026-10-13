@@ -71,8 +71,16 @@ class Analyzer:
             final_spoof_score = w2v2_score
             dsp_reason = f"Абсолютная уверенность ML (W: {w2v2_score:.2f})"
         elif 0.30 <= flatness <= 0.48:
-            final_spoof_score = min(w2v2_score, spoof_threshold - 0.1)
-            dsp_reason = f"Физика микрофона (W: {w2v2_score:.2f}, F: {flatness:.2f}, R: {rolloff:.0f}Hz)"
+            # Если ML очень уверен (>0.97) И спектральные признаки не кричат "живой" — доверяем ML
+            # Живая речь: rolloff > 3300 Hz И spec_var > 2000 (бины STFT)
+            # Синтез F5: rolloff ~1700 Hz, spec_var ~5000 — нет высоких частот
+            is_live_spectrum = (rolloff > 3300 and spec_var > 2000)
+            if w2v2_score > 0.97 and not is_live_spectrum:
+                final_spoof_score = w2v2_score
+                dsp_reason = f"ML высокий приоритет (W: {w2v2_score:.2f}, F: {flatness:.2f})"
+            else:
+                final_spoof_score = min(w2v2_score, spoof_threshold - 0.1)
+                dsp_reason = f"Физика микрофона (W: {w2v2_score:.2f}, F: {flatness:.2f}, R: {rolloff:.0f}Hz)"
         elif flatness > 0.55:
             final_spoof_score = 0.99
             dsp_reason = f"Аномалия ВЧ (Сглаживание): (F: {flatness:.2f}, R: {rolloff:.0f}Hz)"
