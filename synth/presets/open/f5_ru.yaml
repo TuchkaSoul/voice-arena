@@ -26,3 +26,5 @@ text:
   expand_numbers: true
   expand_abbrev: true
   strip_stress: false
+  stress_overrides:
+    зиме: зим+е

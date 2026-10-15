@@ -7,6 +7,7 @@ from pathlib import Path
 
 from analyzer.pipeline import Analyzer
 from report import print_header, format_row, print_footer
+from provenance import collect as collect_provenance, sha256_file
 
 AUDIO_EXTS = {".wav", ".flac", ".mp3", ".ogg", ".m4a", ".opus", ".aac", ".wma"}
 
@@ -34,7 +35,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--jsonl",
-        help="сохранить оценки всех файлов в JSONL для сравнения раундов",
+        help="сохранить оценки и SHA-256 файлов в JSONL; рядом — *.metadata.json с версиями и весами",
     )
     parser.add_argument(
         "--manifest", nargs="+",
@@ -135,7 +136,19 @@ def main() -> int:
             import torch
             analyzer.device = torch.device(args.device)
             analyzer.ast_w2v2.device = analyzer.device
-            analyzer.ast_w2v2.model = analyzer.ast_w2v2.model.to(analyzer.device)
+            dtype = torch.float16 if analyzer.device.type == "cuda" else torch.float32
+            analyzer.ast_w2v2.model = analyzer.ast_w2v2.model.to(device=analyzer.device, dtype=dtype)
+
+        run_metadata = None
+        if args.jsonl:
+            run_metadata = collect_provenance(Path(args.model_path), Path(args.vad_path), Path(args.ecapa_path))
+            model = analyzer.ast_w2v2.model
+            run_metadata.update({
+                "threshold": args.threshold, "device": str(analyzer.device),
+                "model_dtype": str(model.dtype), "spoof_idx": analyzer.ast_w2v2.spoof_idx,
+                "attention_implementation": getattr(model.config, "_attn_implementation", None),
+                "id2label": model.config.id2label,
+            })
             
         print(f"[*] Inference device: {str(analyzer.device).upper()}", file=sys.stderr)
         if args.manifest:
@@ -154,9 +167,11 @@ def main() -> int:
     records = []
     for path in files:
         try:
+            audio_hash = sha256_file(Path(path)) if args.jsonl else None
             res = analyzer.analyze(path, spoof_threshold=args.threshold)
             print(format_row(res))
-            records.append({**res, "file": os.path.abspath(path)})
+            records.append({**res, "file": os.path.abspath(path),
+                            **({"audio_sha256": audio_hash} if audio_hash is not None else {})})
         except Exception as e:
             print(f"│ Error analyzing {path}: {e}")
             records.append({"file": os.path.abspath(path), "error": str(e)})
@@ -168,6 +183,11 @@ def main() -> int:
         with output.open("w", encoding="utf-8") as f:
             for record in records:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        run_metadata.update({"results_sha256": sha256_file(output), "files": len(records),
+                             "errors": sum("error" in record for record in records)})
+        metadata_path = Path(str(output) + ".metadata.json")
+        metadata_path.write_text(json.dumps(run_metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"[*] Run metadata: {metadata_path}", file=sys.stderr)
     return 0
 
 if __name__ == "__main__":

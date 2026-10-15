@@ -1,0 +1,30 @@
+name: f5_matv
+engine: f5
+notes: >
+  F5-TTS_RUSSIAN, голос matv из предоставленной записи команды.
+  Короткий образец и соответствующий текст подготовлены из matv.wav / matv.txt.
+  Базовый голос f5_ru сохранён отдельным пресетом. Веса CC BY-NC 4.0.
+
+engine_params:
+  model: F5TTS_v1_Base
+  model_id: Misha24-10/F5-TTS_RUSSIAN
+  revision: ea166adeae4c80ec5ee423a671e2bdb83906cf84
+  checkpoint: models/f5-russian/F5TTS_v1_Base/model_240000_inference.safetensors
+  vocab: models/f5-russian/F5TTS_v1_Base/vocab.txt
+  vocoder_path: models/vocos-mel-24khz
+  speaker_wav: voices/matv_ref.wav
+  ref_text_file: voices/matv_ref.txt
+  device: auto
+  generate_params:
+    nfe_step: 32
+    speed: 1.0
+    cfg_strength: 2.0
+    sway_sampling_coef: -1.0
+    remove_silence: false
+
+text:
+  expand_numbers: true
+  expand_abbrev: true
+  strip_stress: false
+  stress_overrides:
+    зиме: зим+е

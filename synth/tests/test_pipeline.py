@@ -152,6 +152,26 @@ def test_empty_channel_list_rejected(tmp_path):
 
 
 @needs_ffmpeg
+@pytest.mark.parametrize("preset_seed,expected", [(None, 1337), (17, 17)])
+def test_f5_records_actual_inference_seed(tmp_path, monkeypatch, preset_seed, expected):
+    captured = []
+
+    def create(name, params):
+        captured.append(params)
+        return CountingEngine(params)
+
+    monkeypatch.setattr(registry, "create", create)
+    params = {"generate_params": {"seed": preset_seed, "cfg_strength": 1.5}}
+    run = SynthRun(Preset(name="fake_f5", engine="f5", engine_params=params),
+                   ["clean"], tmp_path, "rt", seed=1337)
+    rows = run.run(PHRASES)
+    assert captured[0]["generate_params"]["seed"] == expected
+    assert all(row.seed == expected for row in rows["clean"])
+    assert all(row.engine_params == captured[0] for row in rows["clean"])
+    assert params["generate_params"]["seed"] == preset_seed
+
+
+@needs_ffmpeg
 def test_live_m4a_file_gets_bonafide_manifest(tmp_path):
     raw = tmp_path / "source.wav"
     sf.write(raw, np.zeros(22050, dtype=np.float32), 22050)

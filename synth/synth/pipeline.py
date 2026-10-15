@@ -83,7 +83,18 @@ class SynthRun:
         random.seed(self.seed)
         np.random.seed(self.seed)
 
-        engine = registry.create(self.preset.engine, self.preset.engine_params)
+        engine_params = dict(self.preset.engine_params)
+        if self.preset.engine == "f5":
+            # F5 otherwise samples a new seed inside infer(), so the manifest
+            # would record the run seed rather than the actual inference seed.
+            generate_params = dict(engine_params.get("generate_params", {}))
+            generate_params.setdefault("seed", self.seed)
+            if generate_params["seed"] is None:
+                generate_params["seed"] = self.seed
+            engine_params["generate_params"] = generate_params
+        effective_seed = (engine_params["generate_params"]["seed"]
+                          if self.preset.engine == "f5" else self.seed)
+        engine = registry.create(self.preset.engine, engine_params)
         engine.ensure_loaded()
 
         rows: dict[str, list[manifest.ManifestRow]] = {ch: [] for ch in self.channels}
@@ -117,10 +128,10 @@ class SynthRun:
                             duration_sec=round(utterance.duration, 3),
                             sha256=manifest.sha256_file(final),
                             run_id=self.run_id,
-                            seed=self.seed,
+                            seed=effective_seed,
                             created_at=manifest.now_iso(),
                             corpus=self.corpus,
-                            engine_params=dict(self.preset.engine_params),
+                            engine_params=engine_params,
                         )
                     )
 

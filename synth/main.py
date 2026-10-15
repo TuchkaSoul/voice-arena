@@ -106,13 +106,25 @@ def cmd_channel(args: argparse.Namespace) -> int:
 
 def cmd_evaluate(args: argparse.Namespace) -> int:
     paths = [Path(name) for name in args.manifest]
-    for row in evaluation.summarize(paths, Path(args.results), Path(args.root)):
+    if args.by_dataset:
+        print(f"Нейросеть: синтез при model_score > {args.model_threshold:g}. "
+              "Смена вердикта: нейросеть и итог дали разные классы.")
+    for row in evaluation.summarize(
+        paths, Path(args.results), Path(args.root),
+        by_dataset=args.by_dataset, model_threshold=args.model_threshold,
+    ):
         if row.error_rate is None:
             rate = "нет оценок"
         else:
             rate = f"{row.mistakes}/{row.evaluated} ({row.error_rate:.1%})"
         kind = "пропуски синтеза" if row.label == manifest.LABEL_SPOOF else "ложные тревоги"
-        print(f"{row.channel:<10} {kind:<19} {rate}; без оценки: {row.errors}")
+        prefix = (f"{row.run_id or '?'} / {row.preset or '?'} / {row.corpus or 'без корпуса'} / "
+                  if args.by_dataset else "")
+        details = (f"; нейросеть: синтез {row.model_spoof}/{row.model_evaluated}; "
+                   f"смена вердикта: {row.verdict_changes}; "
+                   f"без model_score: {row.evaluated - row.model_evaluated}"
+                   if args.by_dataset else "")
+        print(f"{prefix}{row.channel:<10} {kind:<19} {rate}; без оценки: {row.errors}{details}")
     return 0
 
 
@@ -155,6 +167,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="файлы манифестов синтеза и живого голоса")
     e.add_argument("--results", required=True, help="JSONL от analyzer/main.py --jsonl")
     e.add_argument("--root", default=".", help="корень путей в манифестах (synth/)")
+    e.add_argument("--by-dataset", action="store_true",
+                   help="разделить раунды, пресеты и корпуса; показать нейросеть и смену вердикта")
+    e.add_argument("--model-threshold", type=float, default=0.5,
+                   help="порог model_score для сравнения с итогом (как --threshold анализатора)")
     e.set_defaults(func=cmd_evaluate)
 
     n = sub.add_parser("normalize", help="показать, что движок получит на вход")

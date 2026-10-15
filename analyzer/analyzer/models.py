@@ -69,7 +69,7 @@ class Wav2Vec2AntiSpoof:
         if not chunks: return 0.0
 
         inputs = self.processor(chunks, sampling_rate=SR, return_tensors="pt", padding=True)
-        inputs = {k: v.to(self.device, dtype=torch.float16) if v.dtype == torch.float32 else v.to(self.device) for k, v in inputs.items()}
+        inputs = {k: v.to(self.device, dtype=self.model.dtype) if v.dtype.is_floating_point else v.to(self.device) for k, v in inputs.items()}
         
         with torch.no_grad():
             outputs = self.model(**inputs)

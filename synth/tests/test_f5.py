@@ -66,3 +66,20 @@ def test_unsupported_characters_are_not_silently_discarded():
     engine._vocab = set("текст")
     with pytest.raises(ValueError, match="словаре"):
         engine.say("текст🙂")
+
+
+def test_overloaded_waveform_is_scaled_without_flattening_peaks():
+    engine = F5Engine({"generate_params": {"seed": 1337, "cfg_strength": 1.5}})
+    engine._loaded = True
+    engine._vocab = set("текст")
+    calls = []
+
+    def infer(**kwargs):
+        calls.append(kwargs)
+        return np.array([0, .5, 1, 2, -2], dtype=np.float32), 24000, None
+
+    engine._tts = SimpleNamespace(infer=infer)
+    result = engine.say("текст")
+    np.testing.assert_allclose(result.audio, [0, .25, .5, 1, -1])
+    assert calls[0]['seed'] == 1337
+    assert calls[0]['cfg_strength'] == 1.5

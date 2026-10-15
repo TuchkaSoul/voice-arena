@@ -92,4 +92,8 @@ class F5Engine(SynthEngine):
         audio = np.asarray(wav, dtype=np.float32)
         if not len(audio) or not np.isfinite(audio).all():
             raise ValueError("F5: пустой или некорректный результат синтеза")
-        return Utterance(audio=np.clip(audio, -1.0, 1.0), sr=int(sr))
+        # Scale the whole waveform if overloaded: hard clipping creates harmonics.
+        peak = float(np.max(np.abs(audio)))
+        if peak > 1.0:
+            audio = audio / peak
+        return Utterance(audio=audio, sr=int(sr))
