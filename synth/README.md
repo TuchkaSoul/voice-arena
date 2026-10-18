@@ -539,3 +539,90 @@ F5 выше, загрузите закреплённые веса, задайт�
 контрольные суммы, параметры и `listen.html`. Это сравнение обработки;
 падение спектральной энергии нельзя автоматически считать снижением шума
 или ростом естественности.
+
+### Проверка ресемплера и входной частоты Opus
+
+Опыт 18 октября 2026 показал зависимость итогового каскада от подготовки
+Opus. Сводка и ограничения — в [RESULTS.md](RESULTS.md). Базовые
+каналы и анализатор для этого опыта не изменяются.
+
+Для одного исходного файла кандидат воспроизводится командой:
+
+```powershell
+ffmpeg -nostdin -n -i input.wav -af "loudnorm=I=-23:LRA=7:TP=-2,aresample=48000:resampler=soxr:precision=28" -ar 48000 -ac 1 -c:a libopus -b:a 24k -application voip output.ogg
+```
+
+48 кГц — частота сигнала на входе кодека, 24 кбит/с — битрейт.
+Исходные F5 WAV имеют 24 кГц; повышение частоты не добавляет деталей.
+Кандидат меняет весь тракт кодирования и чтения анализатором, поэтому
+результат нельзя приписывать только одному внутреннему этапу.
+Повторное перекодирование мессенджером этим опытом не проверено.
+
+Для повторения поиска на сохранённых источниках r12 из synth/:
+
+```powershell
+.\.venv-f5\Scripts\python.exe probe_resampling.py prepare --out runs/my-resampling-check
+.\.venv-f5\Scripts\python.exe probe_resampling.py prepare --out runs/my-opus-check --profile opus-bandwidth
+```
+
+Для проверки на новых текстах и seed сначала сгенерируйте источники
+штатными пресетами F5, затем подготовьте сравниваемые каналы:
+
+```powershell
+$env:PYTHONUTF8='1'
+$env:USE_TF='0'
+$env:USE_TORCH='1'
+$env:HF_HUB_OFFLINE='1'
+.\.venv-f5\Scripts\python.exe generate_channel_validation.py --out runs/my-new-phrases
+.\.venv-f5\Scripts\python.exe probe_resampling.py prepare --out runs/my-channel-validation --sources runs/my-new-phrases/sources.json --profile validation
+```
+
+Источники содержат четыре текста и seed 2207/7811 для каждого голоса.
+Каталоги вывода должны быть новыми. Для анализа перейдите в analyzer/:
+
+```powershell
+..\synth\.venv\Scripts\python.exe main.py --manifest ../synth/runs/my-channel-validation/inputs.jsonl --jsonl ../synth/runs/my-channel-validation/analysis.jsonl --threshold 0.5
+```
+
+Затем из synth/:
+
+```powershell
+.\.venv-f5\Scripts\python.exe probe_resampling.py summarize --out runs/my-channel-validation
+```
+
+Для других подготовленных серий замените имя каталога в последних двух
+командах. Сводка проверяет SHA-256 источников и каждого оценённого файла;
+ошибки обработки и отсутствующие оценки не засчитываются как обход.
+Сохраняются параметры генерации, команды ffmpeg, версии, снимки скриптов,
+полные оценки, `REPORT.md`, `scores.csv`, `listen.html` и
+`comparison.html` с попарным сравнением штатного и выбранного Opus.
+Естественность и соответствие произнесённого текста проверяются отдельно.
+Незавершённую команду остановите Ctrl+C; для нового запуска выберите
+другой каталог, сохранив историю попытки. Постоянных служб эти скрипты
+не запускают, веса моделей не изменяют.
+
+### Страница прослушивания с проверенными окончаниями
+
+Для короткой серии из четырёх фраз обоими голосами добавьте 1.2 с
+именно к генерации, проверьте последние слова и подготовьте плееры:
+
+```powershell
+.\.venv-f5\Scripts\python.exe generate_channel_validation.py --out runs/my-listening-sources --seeds 2207 --reserve-sec 1.2
+.\.venv-f5\Scripts\python.exe check_listening_endings.py --sources runs/my-listening-sources/sources.json --out runs/my-listening-sources/ending-checks.json
+.\.venv-f5\Scripts\python.exe build_listening_page.py --sources runs/my-listening-sources/sources.json --checks runs/my-listening-sources/ending-checks.json --out runs/my-listening-page
+.\.venv-f5\Scripts\python.exe serve_listening.py --directory runs/my-listening-page --port 8767
+```
+
+Окружение и офлайн-переменные — как в предыдущем разделе. Выходные
+каталоги должны быть новыми. Открыть `http://127.0.0.1:8767/listen.html`.
+Сервер слушает только этот компьютер; остановка — Ctrl+C. Поддержка
+HTTP Range нужна для кнопок перехода к концу записи. Для совместимости
+со встроенным браузером Opus воспроизводится через float32 WAV,
+декодированный из готового Ogg без фильтров; сами Ogg доступны рядом.
+К каждому варианту добавлены одинаковые 0.45 с паузы после речи.
+
+Сборка откажется продолжать, если проверка не распознала последние
+слова хотя бы одной фразы. Автопроверка не заменяет оценку на слух.
+Оценки сохраняются в браузере; кнопка скачивания экспортирует их
+в JSON. В новой серии с запасом времени результаты прежних запусков
+детектора не заявляются как повторно подтверждённые.
