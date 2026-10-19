@@ -626,3 +626,99 @@ HTTP Range нужна для кнопок перехода к концу зап�
 Оценки сохраняются в браузере; кнопка скачивания экспортирует их
 в JSON. В новой серии с запасом времени результаты прежних запусков
 детектора не заявляются как повторно подтверждённые.
+
+### Сравнить шаги F5 и CFG при фиксированном новом канале
+
+```powershell
+.\.venv-f5\Scripts\python.exe sweep_f5_margin.py generate --out runs/my-f5-grid
+.\.venv-f5\Scripts\python.exe check_listening_endings.py --sources runs/my-f5-grid/sources.json --out runs/my-f5-grid/ending-checks.json
+```
+
+По умолчанию перебираются 32/48/64 шага и CFG 1.5/2/2.5 на V0001
+и V0003, seed 2207. Длительности берутся из локального манифеста r16,
+с его запасом 1.2 с. Нужен `runs/r16-listening-tail-20261018/sources.json`.
+Другие профили задаются как `--profiles число_шагов:CFG`, фразы — через
+`--utterances`, случайные зерна — через `--seeds`. Во всех случаях
+сохраняются сырые WAV и точные Opus с одним и тем же новым каналом.
+
+Из analyzer/ выполните:
+
+```powershell
+..\synth\.venv\Scripts\python.exe main.py --manifest ../synth/runs/my-f5-grid/inputs.jsonl --jsonl ../synth/runs/my-f5-grid/analysis.jsonl --threshold 0.5
+```
+
+Затем из synth/:
+
+```powershell
+.\.venv-f5\Scripts\python.exe sweep_f5_margin.py summarize --out runs/my-f5-grid
+```
+
+Используйте офлайн-переменные и окружение из предыдущих разделов.
+Сводка сверяет SHA-256 аудио, результатов и проверки окончаний.
+Выбор идёт по худшему баллу нейросети, затем среднему, среди профилей
+с распознанными окончаниями и всеми итоговыми вердиктами bonafide.
+WER здесь — расхождение ASR с текстом, а не подтверждённые на слух
+ошибки синтеза. Для проверки зафиксированной настройки создайте
+отдельную серию и используйте при summarize
+`--validation-of runs/my-f5-grid`: повторного выбора по ней не будет.
+
+### Сравнить другой фрагмент основного голоса
+
+Сначала проверьте происхождение доступных фрагментов и получите
+автоматические расшифровки без обращения к детектору:
+
+```powershell
+.\.venv-f5\Scripts\python.exe audit_voice_references.py --out runs/my-reference-audit
+```
+
+Сценарий сопоставляет speaker_ru_1/2/3 с `voices/Запись.m4a`
+по звуковому сигналу и сохраняет смещение, корреляцию, хэши и текст
+Whisper Base. При необходимости можно выделить новый фрагмент:
+
+```powershell
+.\.venv-f5\Scripts\python.exe audit_voice_references.py --out runs/my-reference-crop --segments 38.72:6.45
+.\.venv-f5\Scripts\python.exe compare_f5_references.py generate --out runs/my-reference-comparison --alternate-audio runs/my-reference-crop/candidate_1.wav --alternate-text runs/my-reference-crop/candidate_1.asr.txt --reference-audit runs/my-reference-crop/audit.json
+.\.venv-f5\Scripts\python.exe check_listening_endings.py --sources runs/my-reference-comparison/sources.json --out runs/my-reference-comparison/ending-checks.json
+```
+
+Из analyzer/ запустите прежний анализатор с
+`--manifest ../synth/runs/my-reference-comparison/inputs.jsonl`
+и `--jsonl ../synth/runs/my-reference-comparison/analysis.jsonl --threshold 0.5`.
+Затем из synth/:
+
+```powershell
+.\.venv-f5\Scripts\python.exe compare_f5_references.py summarize --out runs/my-reference-comparison
+```
+
+Окружение и офлайн-переменные прежние. Для генерации нужны исходные
+длительности `runs/r16-listening-tail-20261018/sources.json` и сырые WAV,
+для сопоставления окружения — метаданные анализатора r18. Всегда
+используйте новые каталоги вывода. Прежний и другой референс проверяются
+на V0001–V0004, seed 2207/7811, при 32 шагах и CFG=2. Новый канал
+сохраняется. Длина генерируемой части одинакова в каждой паре;
+общая fix_duration пересчитана с учётом длины своего референса.
+Если нужен дополнительный запас, `--extra-gen-sec` добавляет одинаковое
+время обеим ветвям. Это новая попытка; предыдущие результаты сохраняются.
+
+Автоматическую расшифровку референса нужно проверить на слух.
+Связный текст ASR и найденные окончания не доказывают естественность
+или сходство тембра. Скрипт не меняет основной пресет и веса.
+
+### Архив успешной ветки r20
+
+`package_winning_run.py` собирает восемь точных Ogg ветки alternate из
+локального `runs/r20-f5-reference-comparison-20261018-v2/`, инструкцию
+анализирующему агенту, манифест, прежние результаты и контрольные суммы.
+Все файлы внутри ZIP находятся в корне, аудио не перекодируется.
+
+```powershell
+.\.venv-f5\Scripts\python.exe package_winning_run.py
+```
+
+Результат: `runs/exports/voice-arena-winning-r20-20261019.zip`.
+Нужны сохранённые входы, результаты, метаданные генерации и проверки
+окончаний r20. При уже существующем архиве или каталоге экспорта скрипт
+останавливается, чтобы не перезаписывать результат. Программа сверяет
+хэши входов и содержимого ZIP, проверяет CRC и отсутствие вложенных папок.
+Результаты и архив остаются локально согласно `.gitignore`; в Git
+хранятся скрипт упаковки, инструкция в нём и описание результата.

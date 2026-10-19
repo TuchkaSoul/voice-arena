@@ -31,6 +31,8 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model = WhisperForConditionalGeneration.from_pretrained(model_dir, local_files_only=True).to(device).eval()
     sources = json.loads(args.sources.read_text(encoding="utf-8"))
+    model_source = json.loads((model_dir/"source.json").read_text(encoding="utf-8"))
+    model_weights_hash = sha256_file(model_dir/"model.safetensors")
     rows = []
     for source in sources:
         path = Path(source["path"])
@@ -63,8 +65,8 @@ def main():
         rows.append(row)
         report = dict(created_at=now_iso(), sources_sha256=sha256_file(args.sources),
                       script_sha256=sha256_file(Path(__file__)),
-                      model_source=json.loads((model_dir/"source.json").read_text(encoding="utf-8")),
-                      model_weights_sha256=sha256_file(model_dir/"model.safetensors"),
+                      model_source=model_source,
+                      model_weights_sha256=model_weights_hash,
                       num_beams=5, rows=rows,
                       all_endings_recognized=all(r["ending_recognized"] for r in rows))
         args.out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
