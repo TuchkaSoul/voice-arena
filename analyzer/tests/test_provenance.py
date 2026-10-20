@@ -22,15 +22,15 @@ def test_model_and_vad_fingerprints_can_be_compared_without_loading_models(tmp_p
     (model_dir / "unrelated.txt").write_text("not a model file")
     vad = tmp_path / "vad.onnx"
     vad.write_bytes(b"vad")
-    ecapa = tmp_path / "ecapa.onnx"
-    ecapa.write_bytes(b"ecapa")
-    first = collect(model_dir, vad, ecapa)
+
+    first = collect(model_dir, vad)
     assert first["schema"] == "voice-arena/analyzer-provenance@1"
     assert {Path(row["path"]).name for row in first["model_files"]} == {"config.json", "model.safetensors"}
     assert first["vad"]["sha256"] == hashlib.sha256(b"vad").hexdigest()
     assert "torch" in first["versions"] and "transformers" in first["versions"]
     assert first["source_files"]
+
     weights.write_bytes(b"other weights")
-    second = collect(model_dir, vad, ecapa)
+    second = collect(model_dir, vad)
     assert first["model_files"] != second["model_files"]
     assert first["source_files"] == second["source_files"]
