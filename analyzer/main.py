@@ -11,6 +11,7 @@ from provenance import collect as collect_provenance, sha256_file
 
 AUDIO_EXTS = {".wav", ".flac", ".mp3", ".ogg", ".m4a", ".opus", ".aac", ".wma"}
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="deepfake-detector",
@@ -39,11 +40,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--manifest", nargs="+",
-        help="взять только файлы из указанных манифестов синтеза и живого голоса",
+        help="взять только файлы из указанных манифестов",
     )
     parser.add_argument(
-        "--manifest-root", default="../synth",
-        help="корень относительных путей в манифестах (по умолчанию ../synth)",
+        "--manifest-root", default=".",
+        help="корень относительных путей в манифестах (по умолчанию текущая директория)",
     )
     parser.add_argument(
         "--device",
@@ -66,12 +67,8 @@ def parse_args() -> argparse.Namespace:
         default="garystafford/wav2vec2-deepfake-voice-detector",
         help="HuggingFace model id (used if local dir is missing)",
     )
-    parser.add_argument(
-        "--ecapa-path",
-        default="models/voxceleb_ECAPA512.onnx",
-        help="Path to ECAPA speaker embedding ONNX model",
-    )
     return parser.parse_args()
+
 
 def collect_files(audio_dir: str, recursive: bool) -> list[str]:
     if not os.path.isdir(audio_dir):
@@ -112,15 +109,20 @@ def collect_manifest_files(paths: list[str], root: str) -> list[str]:
                 files.append(str(path))
     return files
 
+
 def main() -> int:
     args = parse_args()
 
     try:
-        files = (collect_manifest_files(args.manifest, args.manifest_root)
-                 if args.manifest else sorted(collect_files(args.audio_dir, args.recursive)))
+        files = (
+            collect_manifest_files(args.manifest, args.manifest_root)
+            if args.manifest
+            else sorted(collect_files(args.audio_dir, args.recursive))
+        )
     except (OSError, ValueError, KeyError) as e:
         print(f"Invalid manifest: {e}", file=sys.stderr)
         return 2
+
     if not files:
         print(f"No audio files found in '{args.audio_dir}'.", file=sys.stderr)
         return 0
@@ -130,26 +132,22 @@ def main() -> int:
             vad_path=args.vad_path,
             model_path=args.model_path,
             model_id=args.model_id,
-            ecapa_path=args.ecapa_path,
+            device=args.device,
         )
-        if args.device != "auto":
-            import torch
-            analyzer.device = torch.device(args.device)
-            analyzer.ast_w2v2.device = analyzer.device
-            dtype = torch.float16 if analyzer.device.type == "cuda" else torch.float32
-            analyzer.ast_w2v2.model = analyzer.ast_w2v2.model.to(device=analyzer.device, dtype=dtype)
 
         run_metadata = None
         if args.jsonl:
-            run_metadata = collect_provenance(Path(args.model_path), Path(args.vad_path), Path(args.ecapa_path))
+            run_metadata = collect_provenance(Path(args.model_path), Path(args.vad_path))
             model = analyzer.ast_w2v2.model
             run_metadata.update({
-                "threshold": args.threshold, "device": str(analyzer.device),
-                "model_dtype": str(model.dtype), "spoof_idx": analyzer.ast_w2v2.spoof_idx,
+                "threshold": args.threshold,
+                "device": str(analyzer.device),
+                "model_dtype": str(model.dtype),
+                "spoof_idx": analyzer.ast_w2v2.spoof_idx,
                 "attention_implementation": getattr(model.config, "_attn_implementation", None),
                 "id2label": model.config.id2label,
             })
-            
+
         print(f"[*] Inference device: {str(analyzer.device).upper()}", file=sys.stderr)
         if args.manifest:
             print(f"[*] Reading {len(args.manifest)} manifest(s)", file=sys.stderr)
@@ -163,32 +161,40 @@ def main() -> int:
     print(f"[*] Found {len(files)} file(s).", file=sys.stderr)
     print_header()
 
-    # Секвентальная обработка файлов для безопасного доступа к GPU
     records = []
     for path in files:
         try:
             audio_hash = sha256_file(Path(path)) if args.jsonl else None
             res = analyzer.analyze(path, spoof_threshold=args.threshold)
             print(format_row(res))
-            records.append({**res, "file": os.path.abspath(path),
-                            **({"audio_sha256": audio_hash} if audio_hash is not None else {})})
+            records.append({
+                **res,
+                "file": os.path.abspath(path),
+                **({"audio_sha256": audio_hash} if audio_hash is not None else {}),
+            })
         except Exception as e:
             print(f"│ Error analyzing {path}: {e}")
             records.append({"file": os.path.abspath(path), "error": str(e)})
 
-    print_footer()
+    print_footer(records)
+
     if args.jsonl:
         output = Path(args.jsonl)
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("w", encoding="utf-8") as f:
             for record in records:
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
-        run_metadata.update({"results_sha256": sha256_file(output), "files": len(records),
-                             "errors": sum("error" in record for record in records)})
+        run_metadata.update({
+            "results_sha256": sha256_file(output),
+            "files": len(records),
+            "errors": sum("error" in record for record in records),
+        })
         metadata_path = Path(str(output) + ".metadata.json")
         metadata_path.write_text(json.dumps(run_metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"[*] Run metadata: {metadata_path}", file=sys.stderr)
+
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

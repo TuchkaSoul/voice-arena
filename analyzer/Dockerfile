@@ -3,16 +3,10 @@ FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     libsndfile1 \
-    libsndfile1-dev \
-    libvorbis-dev \
-    libogg-dev \
-    libflac-dev \
-    libopus-dev \
-    libmp3lame-dev \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
